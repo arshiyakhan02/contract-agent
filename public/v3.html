@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contract Assistant v3 (Debug)</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+        }
+
+        input,
+        button {
+            padding: 10px;
+            margin: 5px 0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .log-box {
+            background: #333;
+            color: #0f0;
+            font-family: monospace;
+            padding: 10px;
+            height: 150px;
+            overflow-y: scroll;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Contract Assistant v3 (Debug Mode)</h1>
+    <p>Please follow the steps below. Debug logs will appear at the bottom.</p>
+
+    <div class="card">
+        <h2>1. Upload Template</h2>
+        <input type="file" id="templateFile" accept=".pdf" onchange="uploadTemplate()">
+        <p id="uploadStatus">No file selected.</p>
+    </div>
+
+    <div class="card">
+        <h2>2. Create Contract</h2>
+        <input type="text" id="pName" placeholder="Name" value="Alice Smith">
+        <input type="text" id="pEmail" placeholder="Email" value="alice@example.com">
+        <input type="text" id="tName" placeholder="Template Name" value="standard-template.pdf" readonly
+            style="background: #eee;">
+        <button onclick="initContract()">Create Contract</button>
+        <p id="createStatus"></p>
+    </div>
+
+    <div class="card" id="workspace" style="display:none; border: 2px solid #007bff;">
+        <h2>3. Contract Workspace</h2>
+        <p><strong>Contract ID:</strong> <span id="contractId"></span></p>
+        <p><strong>Status:</strong> <span id="contractStatus">DRAFT</span></p>
+
+        <h3>AI Analysis</h3>
+        <div id="aiSummary" style="background: #e9ecef; padding: 10px;">Loading...</div>
+
+        <h3>Sign</h3>
+        <button onclick="sendForSignature()" style="background-color: #28a745;">Generate Signing Link</button>
+        <div id="signResult" style="margin-top: 10px;"></div>
+    </div>
+
+    <h3>Debug Log</h3>
+    <div id="debugLog" class="log-box"></div>
+
+    <script>
+        let currentId = null;
+
+        function log(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            if (type === 'error') div.style.color = '#ff6b6b';
+            document.getElementById('debugLog').prepend(div);
+            console.log(msg);
+        }
+
+        async function uploadTemplate() {
+            const fileInput = document.getElementById('templateFile');
+            if (!fileInput.files[0]) return;
+
+            const file = fileInput.files[0];
+            log(`Starting upload for: ${file.name}`);
+            document.getElementById('uploadStatus').innerText = 'Uploading...';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/api/v1/storage/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.success) {
+                    log(`Upload success: ${data.data.filename}`);
+                    document.getElementById('uploadStatus').innerHTML = `<span class="success">✅ Uploaded: ${data.data.filename}</span>`;
+                    document.getElementById('tName').value = data.data.filename;
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (e) {
+                log(`Upload failed: ${e.message}`, 'error');
+                document.getElementById('uploadStatus').innerHTML = `<span class="error">❌ Error: ${e.message}</span>`;
+                alert('Upload Error: ' + e.message);
+            }
+        }
+
+        async function initContract() {
+            const patientData = {
+                name: document.getElementById('pName').value,
+                email: document.getElementById('pEmail').value,
+                price: "150.00"
+            };
+            const templateName = document.getElementById('tName').value;
+
+            log(`Creating contract with template: ${templateName}`);
+
+            try {
+                const res = await fetch('/api/v1/webhooks/init-contract', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ patientData, templateName })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    log(`Contract created: ${data.data.contractId}`);
+                    currentId = data.data.contractId;
+
+                    document.getElementById('workspace').style.display = 'block';
+                    document.getElementById('contractId').innerText = currentId;
+                    document.getElementById('contractStatus').innerText = data.data.status;
+
+                    // Show Analysis
+                    if (data.data.analysis) {
+                        const analysis = data.data.analysis;
+                        document.getElementById('aiSummary').innerHTML = `<strong>Summary:</strong> ${analysis.summary}`;
+                    }
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (e) {
+                log(`Creation failed: ${e.message}`, 'error');
+                alert('Creation Error: ' + e.message);
+            }
+        }
+
+        async function sendForSignature() {
+            if (!currentId) return alert('No contract created yet');
+            log(`Requesting signature for ${currentId}...`);
+
+            try {
+                const res = await fetch(`/api/v1/contracts/${currentId}/send`, { method: 'POST' });
+                const data = await res.json();
+
+                if (data.success) {
+                    log(`Signature request success. Envelope: ${data.envelopeId}`);
+                    document.getElementById('contractStatus').innerText = 'SENT_FOR_SIGNATURE';
+
+                    let html = `<p>✅ <strong>Envelope Created!</strong></p>`;
+                    if (data.signingUrl) {
+                        log('Signing URL received');
+                        html += `<a href="${data.signingUrl}" target="_blank" style="display:block; background: #28a745; color: white; padding: 15px; text-align: center; text-decoration: none; font-weight: bold; border-radius: 5px;">✍️ CLICK HERE TO SIGN DEMO CONTRACT</a>`;
+                    } else {
+                        log('No signing URL received', 'error');
+                        html += `<p class="error">No signing URL returned. Check backend logs.</p>`;
+                    }
+                    document.getElementById('signResult').innerHTML = html;
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (e) {
+                log(`Signature failed: ${e.message}`, 'error');
+                alert('Signature Error: ' + e.message);
+            }
+        }
+    </script>
+</body>
+
+</html>

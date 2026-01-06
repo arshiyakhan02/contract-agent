@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Connectivity Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>System Status Check</h1>
+    <p>1. JavaScript Status: <span id="js-status" style="color:red">Waiting...</span></p>
+    <p>2. Server Connection: <span id="api-status" style="color:red">Waiting...</span></p>
+
+    <button onclick="testConnection()">Re-Test Connection</button>
+
+    <script>
+        document.getElementById('js-status').innerText = "✅ RUNNING";
+        document.getElementById('js-status').style.color = "green";
+
+        async function testConnection() {
+            try {
+                const res = await fetch('/health');
+                const data = await res.json();
+                document.getElementById('api-status').innerText = "✅ CONNECTED (" + data.status + ")";
+                document.getElementById('api-status').style.color = "green";
+            } catch (e) {
+                document.getElementById('api-status').innerText = "❌ FAILED: " + e.message;
+            }
+        }
+
+        // Auto-run
+        testConnection();
+    </script>
+</body>
+
+</html>

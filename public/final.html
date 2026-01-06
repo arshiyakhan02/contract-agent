@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contract Assistant (Final)</title>
+    <style>
+        body {
+            font-family: -apple-system, system-ui, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #fafafa;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #ddd;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        h1 {
+            margin-top: 0;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            margin-top: 20px;
+        }
+
+        input[type="text"],
+        input[type="email"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background: #000;
+            color: white;
+            border: none;
+            padding: 15px;
+            width: 100%;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #333;
+        }
+
+        .success {
+            color: green;
+            font-weight: bold;
+            margin-top: 10px;
+            display: block;
+        }
+
+        .error {
+            color: red;
+            font-weight: bold;
+            margin-top: 10px;
+            display: block;
+        }
+
+        #step2,
+        #step3 {
+            margin-top: 30px;
+            border-top: 2px dashed #eee;
+            padding-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+        <h1>Contract Assistant</h1>
+
+        <!-- STEP 1 -->
+        <label>1. Upload PDF Template</label>
+        <p style="font-size: 14px; color: #666; margin-bottom: 10px;">Select a PDF file. It will upload automatically.
+        </p>
+        <input type="file" id="fileInput" accept=".pdf" style="font-size: 16px;">
+        <div id="uploadStatus"></div>
+        <input type="hidden" id="filename" value="standard-template.pdf">
+
+        <!-- STEP 2 -->
+        <div id="step2">
+            <label>2. Patient Information</label>
+            <input type="text" id="pName" placeholder="Patient Name" value="Alice Smith">
+            <input type="email" id="pEmail" placeholder="Patient Email" value="alice@example.com">
+            <button onclick="createContract()">Create Contract</button>
+            <div id="createStatus"></div>
+        </div>
+
+        <!-- STEP 3 -->
+        <div id="step3" style="display:none;">
+            <label>3. Actions</label>
+            <div style="background: #f4f4f4; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                <strong>AI Summary:</strong>
+                <p id="aiSummary">Loading...</p>
+            </div>
+            <button onclick="getSignatureLink()" style="background: #10b981;">Generate Signing Link</button>
+            <div id="signResult" style="margin-top: 20px; text-align: center;"></div>
+        </div>
+    </div>
+
+    <script>
+        let contractId = null;
+
+        // Auto-upload on change
+        document.getElementById('fileInput').addEventListener('change', async function () {
+            const file = this.files[0];
+            if (!file) return;
+
+            const status = document.getElementById('uploadStatus');
+            status.innerText = "Uploading " + file.name + "...";
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/api/v1/storage/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.success) {
+                    status.innerHTML = '<span class="success">✅ Uploaded: ' + data.data.filename + '</span>';
+                    document.getElementById('filename').value = data.data.filename;
+                } else {
+                    status.innerHTML = '<span class="error">❌ Upload Failed: ' + data.message + '</span>';
+                }
+            } catch (e) {
+                status.innerHTML = '<span class="error">❌ Error: ' + e.message + '</span>';
+            }
+        });
+
+        async function createContract() {
+            const btn = document.querySelector('button[onclick="createContract()"]');
+            const status = document.getElementById('createStatus');
+            btn.disabled = true;
+            btn.innerText = "Creating...";
+
+            const patientData = {
+                name: document.getElementById('pName').value,
+                email: document.getElementById('pEmail').value,
+                price: "150.00"
+            };
+            const templateName = document.getElementById('filename').value;
+
+            try {
+                const res = await fetch('/api/v1/webhooks/init-contract', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ patientData, templateName })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    contractId = data.data.contractId;
+                    status.innerHTML = '<span class="success">✅ Contract Created!</span>';
+                    document.getElementById('step3').style.display = 'block';
+                    if (data.data.analysis) {
+                        document.getElementById('aiSummary').innerText = data.data.analysis.summary;
+                    }
+                } else {
+                    status.innerHTML = '<span class="error">❌ Failed: ' + data.message + '</span>';
+                }
+            } catch (e) {
+                status.innerHTML = '<span class="error">❌ Error: ' + e.message + '</span>';
+            }
+            btn.disabled = false;
+            btn.innerText = "Create Contract";
+        }
+
+        async function getSignatureLink() {
+            if (!contractId) return;
+            const div = document.getElementById('signResult');
+            div.innerText = "Generating Link...";
+
+            try {
+                const res = await fetch('/api/v1/contracts/' + contractId + '/send', { method: 'POST' });
+                const data = await res.json();
+
+                if (data.success && data.signingUrl) {
+                    div.innerHTML = '<a href="' + data.signingUrl + '" target="_blank" style="padding: 20px; background: #059669; color: white; font-size: 20px; font-weight: bold; text-decoration: none; border-radius: 8px; display: inline-block;">✍️ CLICK HERE TO SIGN</a>';
+                } else {
+                    div.innerText = "Failed to generate link.";
+                }
+            } catch (e) {
+                div.innerText = "Error: " + e.message;
+            }
+        }
+    </script>
+
+</body>
+
+</html>

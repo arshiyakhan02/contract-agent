@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Ultimate Diagnosis</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #222;
+            color: #0f0;
+        }
+
+        .box {
+            border: 1px solid #777;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            font-size: 20px;
+            padding: 10px;
+            width: 100%;
+            cursor: pointer;
+        }
+
+        .fail {
+            color: #f00;
+            background: #300;
+            font-weight: bold;
+        }
+
+        .pass {
+            color: #0f0;
+            background: #030;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>SYSTEM DIAGNOSIS</h1>
+
+    <div class="box">
+        <h3>TEST 1: Browser Capabilities</h3>
+        <div id="test1">Running...</div>
+    </div>
+
+    <div class="box">
+        <h3>TEST 2: Server Connectivity (Health Check)</h3>
+        <div id="test2">Running...</div>
+    </div>
+
+    <div class="box">
+        <h3>TEST 3: File Upload</h3>
+        <input type="file" id="fileInput" onchange="runUploadTest()">
+        <div id="test3">Waiting for file...</div>
+    </div>
+
+    <div class="box">
+        <h3>TEST 4: Create Contract</h3>
+        <button onclick="runCreateTest()">Click to Test Contract Creation</button>
+        <div id="test4">Waiting...</div>
+    </div>
+
+    <script>
+        // Logger
+        function log(id, msg, isError = false) {
+            const el = document.getElementById(id);
+            el.innerHTML += (el.innerHTML === 'Running...' || el.innerHTML === 'Waiting...' ? '' : '<br>') +
+                `<span class="${isError ? 'fail' : 'pass'}">${msg}</span>`;
+        }
+
+        // Test 1: JS Check
+        try {
+            if (window.fetch) {
+                log('test1', '✅ Fetch API available');
+            } else {
+                log('test1', '❌ Fetch API missing (Update Browser)', true);
+            }
+            log('test1', '✅ JavaScript is executing');
+        } catch (e) {
+            log('test1', '❌ JS Error: ' + e.message, true);
+        }
+
+        // Test 2: Health Check
+        fetch('/health')
+            .then(res => res.json())
+            .then(data => log('test2', '✅ Server Configured: ' + JSON.stringify(data)))
+            .catch(err => log('test2', '❌ CONNECTION FAILED: ' + err.message + '. Is server running?', true));
+
+        // Test 3: Upload
+        async function runUploadTest() {
+            const input = document.getElementById('fileInput');
+            if (!input.files[0]) return;
+
+            const formData = new FormData();
+            formData.append('file', input.files[0]);
+
+            log('test3', 'Sending upload request...');
+            try {
+                const res = await fetch('/api/v1/storage/upload', { method: 'POST', body: formData });
+                const txt = await res.text();
+                log('test3', 'Server Response: ' + txt);
+
+                if (res.ok) {
+                    log('test3', '✅ Upload Successful');
+                    // Auto-set standard template name for next test to ensure it works even if this upload was custom
+                    window.uploadedFileName = JSON.parse(txt).data.filename;
+                } else {
+                    log('test3', '❌ Upload Status: ' + res.status, true);
+                }
+            } catch (e) {
+                log('test3', '❌ Upload Error: ' + e.message, true);
+            }
+        }
+
+        // Test 4: Create
+        async function runCreateTest() {
+            log('test4', 'Sending create request...');
+            const payload = {
+                patientData: { name: "Test Diag", email: "test@diag.com", price: "100" },
+                templateName: window.uploadedFileName || "standard-template.pdf"
+            };
+
+            try {
+                const res = await fetch('/api/v1/webhooks/init-contract', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const txt = await res.text();
+                log('test4', 'Server Response: ' + txt);
+
+                if (res.ok) {
+                    const json = JSON.parse(txt);
+                    log('test4', '✅ Contract Created: ' + json.data.contractId);
+
+                    // Auto-trigger sign link gen
+                    log('test4', 'Attempting to generate link...');
+                    const signRes = await fetch(`/api/v1/contracts/${json.data.contractId}/send`, { method: 'POST' });
+                    const signTxt = await signRes.text();
+                    log('test4', 'Sign Response: ' + signTxt);
+                    if (signRes.ok) {
+                        const signJson = JSON.parse(signTxt);
+                        if (signJson.signingUrl) {
+                            log('test4', '✅ LINK GENERATED: <a href="' + signJson.signingUrl + '" target="_blank" style="color:white;text-decoration:underline;">CLICK TO SIGN</a>');
+                        } else {
+                            log('test4', '⚠️ No link in response');
+                        }
+                    }
+                } else {
+                    log('test4', '❌ Create Status: ' + res.status, true);
+                }
+            } catch (e) {
+                log('test4', '❌ Create Error: ' + e.message, true);
+            }
+        }
+    </script>
+</body>
+
+</html>
