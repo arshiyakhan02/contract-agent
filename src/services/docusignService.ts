@@ -83,6 +83,9 @@ class DocusignService {
 
             const envelopesApi = new EnvelopesApi(this.apiClient);
 
+            // ✅ FIX: clientUserId MUST be present for embedded signing
+            const CLIENT_USER_ID = signer.clientUserId || '1000';
+
             const envelope: EnvelopeDefinition = {
                 emailSubject: `Please sign: ${docName}`,
                 status: 'sent',
@@ -100,7 +103,7 @@ class DocusignService {
                             email: signer.email,
                             name: signer.name,
                             recipientId: '1',
-                            clientUserId: signer.clientUserId,
+                            clientUserId: CLIENT_USER_ID,
                             tabs: {
                                 signHereTabs: [
                                     {
@@ -150,12 +153,15 @@ class DocusignService {
 
         const envelopesApi = new EnvelopesApi(this.apiClient);
 
+        // ✅ SAME clientUserId as envelope
+        const CLIENT_USER_ID = signer.clientUserId || '1000';
+
         const viewRequest: RecipientViewRequest = {
             returnUrl,
             authenticationMethod: 'none',
             email: signer.email,
             userName: signer.name,
-            clientUserId: signer.clientUserId
+            clientUserId: CLIENT_USER_ID
         };
 
         const result = await envelopesApi.createRecipientView(
@@ -168,7 +174,7 @@ class DocusignService {
     }
 
     /**
-     * ✅ FIX: Retry logic to avoid first-click failure
+     * Retry logic for recipient view URL
      */
     async getRecipientViewUrlWithRetry(
         envelopeId: string,
@@ -177,7 +183,6 @@ class DocusignService {
         retries: number = 3,
         delayMs: number = 1500
     ): Promise<string> {
-
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
                 logger.info(`Recipient view attempt ${attempt}`);

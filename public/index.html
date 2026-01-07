@@ -2,23 +2,24 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contract Assistant</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Contract Assistant v3 (Debug)</title>
 
     <style>
         body {
-            font-family: "Segoe UI", sans-serif;
+            font-family: sans-serif;
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
-            background: #f6fbff;
+            background-color: #f0f0f0;
         }
 
         .card {
             background: white;
             padding: 20px;
             border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
             border: 1px solid #ccc;
         }
@@ -43,99 +44,107 @@
             background-color: #0056b3;
         }
 
-        #chatHistory {
-            height: 300px;
-            overflow-y: auto;
-            padding: 10px;
-            background: #f9f9f9;
+        .success {
+            color: green;
+            font-weight: bold;
         }
 
-        .message {
-            max-width: 80%;
-            padding: 10px 14px;
-            border-radius: 12px;
-            margin: 8px 0;
-            word-wrap: break-word;
-        }
-
-        .message.user {
-            background: #e3f2fd;
-            color: #0d47a1;
-            margin-left: auto;
-        }
-
-        .message.ai {
-            background: #ffffff;
-            color: #1b5e20;
-            border-left: 4px solid #4caf50;
-        }
-
-        .message.thinking {
-            background: #fff7ed;
-            color: #92400e;
-            font-style: italic;
-        }
-
-        .message.error {
-            background: #f8d7da;
-            color: #721c24;
+        .error {
+            color: red;
+            font-weight: bold;
         }
     </style>
 </head>
 
 <body>
-
     <h1>Contract Assistant</h1>
+    <p>Please follow the steps below.</p>
 
     <div class="card">
-        <h3>Upload Template</h3>
-        <input type="file" id="templateFile" accept=".pdf" onchange="uploadTemplate()">
+        <h2>1. Upload Template</h2>
+        <input type="file" id="templateFile" accept=".pdf" onchange="uploadTemplate()" />
         <p id="uploadStatus">No file selected.</p>
     </div>
 
     <div class="card">
-        <h3>Create Contract</h3>
-        <input type="text" id="pName" placeholder="Your Name">
-        <input type="text" id="pEmail" placeholder="Your Email">
-        <input type="text" id="tName" value="standard-template.pdf" readonly>
+        <h2>2. Create Contract</h2>
+        <input type="text" id="pName" placeholder="Your Name" />
+        <input type="text" id="pEmail" placeholder="Your Email" />
+        <input type="text" id="tName" placeholder="Template Name" value="standard-template.pdf" readonly
+            style="background: #eee;" />
         <button onclick="initContract()">Create Contract</button>
+        <p id="createStatus"></p>
     </div>
 
-    <div class="card" id="workspace" style="display:none;">
+    <div class="card" id="workspace" style="display: none; border: 2px solid #007bff;">
+        <h2>3. Contract Workspace</h2>
+
+        <p><strong>Contract ID:</strong> <span id="contractId"></span></p>
+        <p><strong>Status:</strong> <span id="contractStatus">DRAFT</span></p>
+
         <h3>AI Contract Chat</h3>
 
-        <div id="chatHistory">
-            <div style="font-style: italic; color:#666;">
-                Contract created successfully. You can now chat with the AI.
+        <div id="chatContainer" style="border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;">
+            <div id="chatHistory" style="height: 300px; overflow-y: auto; padding: 10px; background: #f9f9f9;">
+                <div style="color: #666; font-style: italic;">
+                    Contract created successfully. You can now chat with the AI about this document.
+                </div>
+            </div>
+
+            <div style="display: flex; padding: 10px; border-top: 1px solid #eee; background: white;">
+                <input type="text" id="chatInput" placeholder="Type your message..."
+                    style="flex: 1; margin-right: 10px;" onkeypress="if(event.key==='Enter') sendChatMessage()" />
+                <button onclick="sendChatMessage()" style="width: 80px; margin: 0;">Send</button>
             </div>
         </div>
 
-        <div style="display:flex; gap:10px; margin-top:10px;">
-            <input type="text" id="chatInput" placeholder="Type your message..."
-                onkeypress="if(event.key==='Enter') sendChatMessage()">
-            <button style="width:100px" onclick="sendChatMessage()">Send</button>
-        </div>
+        <h3>Sign</h3>
+        <button onclick="sendForSignature()" style="background-color: #28a745;">
+            Generate Signing Link
+        </button>
+
+        <div id="signResult" style="margin-top: 10px;"></div>
     </div>
 
     <script>
         let currentId = null;
 
+        function log(msg, type = 'info') {
+            console.log(`[${new Date().toLocaleTimeString()}] ${msg}`);
+        }
+
         async function uploadTemplate() {
             const fileInput = document.getElementById('templateFile');
             if (!fileInput.files[0]) return;
 
+            const file = fileInput.files[0];
+            log(`Starting upload for: ${file.name}`);
+            document.getElementById('uploadStatus').innerText = 'Uploading...';
+
             const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
+            formData.append('file', file);
 
-            const res = await fetch('/api/v1/storage/upload', {
-                method: 'POST',
-                body: formData
-            });
+            try {
+                const res = await fetch('/api/v1/storage/upload', {
+                    method: 'POST',
+                    body: formData
+                });
 
-            const data = await res.json();
-            if (data.success) {
-                document.getElementById('uploadStatus').innerText = "Uploaded";
-                document.getElementById('tName').value = data.data.filename;
+                const data = await res.json();
+
+                if (data.success) {
+                    log(`Upload success: ${data.data.filename}`);
+                    document.getElementById('uploadStatus').innerHTML =
+                        `<span class="success">✅ Uploaded: ${data.data.filename}</span>`;
+                    document.getElementById('tName').value = data.data.filename;
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (e) {
+                log(`Upload failed: ${e.message}`, 'error');
+                document.getElementById('uploadStatus').innerHTML =
+                    `<span class="error">❌ Error: ${e.message}</span>`;
+                alert('Upload Error: ' + e.message);
             }
         }
 
@@ -147,34 +156,45 @@
             };
 
             const templateName = document.getElementById('tName').value;
+            log(`Creating contract with template: ${templateName}`);
 
-            const res = await fetch('/api/v1/webhooks/init-contract', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ patientData, templateName })
-            });
+            try {
+                const res = await fetch('/api/v1/webhooks/init-contract', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ patientData, templateName })
+                });
 
-            const data = await res.json();
-            if (data.success) {
-                currentId = data.data.contractId;
-                document.getElementById('workspace').style.display = 'block';
+                const data = await res.json();
+
+                if (data.success) {
+                    log(`Contract created: ${data.data.contractId}`);
+                    currentId = data.data.contractId;
+
+                    document.getElementById('workspace').style.display = 'block';
+                    document.getElementById('contractId').innerText = currentId;
+                    document.getElementById('contractStatus').innerText = data.data.status;
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (e) {
+                log(`Creation failed: ${e.message}`, 'error');
+                alert('Creation Error: ' + e.message);
             }
         }
 
         async function sendChatMessage() {
             const input = document.getElementById('chatInput');
             const question = input.value.trim();
+
             if (!question || !currentId) return;
 
             input.value = '';
-
-            // ✅ User message always visible
             addChatMessage('user', question);
 
-            // ✅ Single thinking bubble
-            const thinkingId = addChatMessage('thinking', 'Thinking...');
-
             try {
+                const thinkingId = addChatMessage('thinking', 'Thinking...');
+
                 const res = await fetch(`/api/v1/contracts/${currentId}/chat`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -183,17 +203,20 @@
 
                 const data = await res.json();
 
+                if (thinkingId) {
+                    const thinkingEl = document.getElementById(thinkingId);
+                    if (thinkingEl && thinkingEl.parentNode) {
+                        thinkingEl.parentNode.removeChild(thinkingEl);
+                    }
+                }
+
                 if (data.success) {
                     addChatMessage('ai', data.data.answer);
                 } else {
-                    addChatMessage('error', data.message || 'Something went wrong');
+                    addChatMessage('error', 'Error: ' + data.message);
                 }
-            } catch (err) {
-                addChatMessage('error', 'Network error');
-            } finally {
-                // ✅ Thinking ALWAYS removed
-                const thinkingEl = document.getElementById(thinkingId);
-                if (thinkingEl) thinkingEl.remove();
+            } catch (e) {
+                addChatMessage('error', 'Network Error: ' + e.message);
             }
         }
 
@@ -203,28 +226,131 @@
             const id = 'msg-' + Date.now();
 
             div.id = id;
-            div.className = `message ${role}`;
+            div.style.marginBottom = '10px';
+            div.style.padding = '8px 12px';
+            div.style.borderRadius = '15px';
+            div.style.maxWidth = '80%';
 
-            if (role === 'ai') {
+            if (role === 'user') {
+                div.style.marginLeft = 'auto';
+                div.style.background = '#007bff';
+                div.style.color = 'white';
+                div.innerText = text;
+            } else if (role === 'system') {
+                div.style.margin = '0 auto';
+                div.style.background = '#e2e3e5';
+                div.style.color = '#383d41';
+                div.style.textAlign = 'center';
+                div.style.fontSize = '0.9em';
+                div.innerText = text;
+            } else if (role === 'error') {
+                div.style.background = '#f8d7da';
+                div.style.color = '#721c24';
+                div.innerText = text;
+            } else {
+                div.style.marginRight = 'auto';
+                div.style.background = '#e9ecef';
+                div.style.color = 'black';
+
                 const points = text
                     .split(/\n|•|- /)
                     .map(p => p.trim())
-                    .filter(Boolean);
+                    .filter(p => p.length > 0);
 
-                let html = `<strong>AI:</strong><ul>`;
-                points.forEach(p => html += `<li>${p}</li>`);
+                let html = `<strong>AI:</strong>
+                    <ul style="margin-top:6px;padding-left:20px;">`;
+
+                points.forEach(p => {
+                    html += `<li>${p}</li>`;
+                });
+
                 html += `</ul>`;
                 div.innerHTML = html;
-            } else {
-                div.textContent = text;
             }
 
             history.appendChild(div);
             history.scrollTop = history.scrollHeight;
+
             return id;
         }
+
+        async function sendForSignature() {
+            if (!currentId) return alert('No contract created yet');
+
+            const btn = document.querySelector('button[onclick="sendForSignature()"]');
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = 'Generating link...';
+            }
+
+            log(`Requesting signature for ${currentId}...`);
+
+            try {
+                const res = await fetch(`/api/v1/contracts/${currentId}/send`, {
+                    method: 'POST'
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    log(`Signature request success. Envelope: ${data.envelopeId}`);
+                    document.getElementById('contractStatus').innerText = 'SENT_FOR_SIGNATURE';
+
+                    let html = `<p><strong>Envelope Created!</strong></p>`;
+
+                    if (data.signingUrl) {
+                        html += `
+                            <a href="${data.signingUrl}" target="_blank"
+                               style="display:block;background:#28a745;color:white;
+                               padding:15px;text-align:center;text-decoration:none;
+                               font-weight:bold;border-radius:5px;">
+                               ✍️ CLICK HERE TO SIGN DEMO CONTRACT
+                            </a>`;
+                    } else {
+                        throw new Error('Signing URL not returned');
+                    }
+
+                    document.getElementById('signResult').innerHTML = html;
+                } else {
+                    throw new Error(data.message || 'Failed to generate signing link');
+                }
+            } catch (e) {
+                log(`Signature failed: ${e.message}`, 'error');
+
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = 'Generate Signing Link';
+                }
+
+                alert('Signature Error: ' + e.message);
+            }
+        }
     </script>
-    
+
+    <script>
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'DOCUSIGN_SIGNED') {
+                const statusEl = document.getElementById('contractStatus');
+                if (statusEl) {
+                    statusEl.innerText = 'SIGNED';
+                    statusEl.style.color = 'green';
+                }
+
+                const signBtn = document.querySelector(
+                    'button[onclick="sendForSignature()"]'
+                );
+
+                if (signBtn) {
+                    signBtn.disabled = true;
+                    signBtn.innerText = 'Signed ✔️';
+                    signBtn.style.background = '#6c757d';
+                }
+
+                alert('✅ Document signed successfully!');
+            }
+        });
+    </script>
 </body>
 
 </html>
