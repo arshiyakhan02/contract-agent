@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "description": "HIPAA-grade Contract Assistant Agent",
   "main": "dist/server.js",
+
+  "engines": {
+    "node": "18.x"
+  },
+
   "scripts": {
     "start": "node dist/server.js",
     "dev": "nodemon -e ts,json,env src/server.ts",
@@ -10,6 +15,7 @@
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+
   "keywords": [
     "contract",
     "ai",
@@ -17,10 +23,12 @@
     "healthcare",
     "docusign"
   ],
+
   "author": "",
   "license": "ISC",
+
   "dependencies": {
-    "@google/generative-ai": "^1.0.0",
+    "@google/generative-ai": "^0.21.0",
     "cors": "^2.8.5",
     "docusign-esign": "^8.5.0",
     "dotenv": "^16.3.1",
@@ -33,6 +41,7 @@
     "uuid": "^9.0.1",
     "winston": "^3.11.0"
   },
+
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/docusign-esign": "^5.19.9",
