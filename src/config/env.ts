@@ -1,31 +1,10 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load environment variables
-const result = dotenv.config({
-    path: path.resolve(__dirname, '../../.env'),
-});
-
-if (result.error) {
-    console.error('❌ Error loading .env file:', result.error);
-} else {
-    console.log('✅ .env file loaded successfully');
-
-    console.log(
-        'ENV CHECK → DOCUSIGN_OAUTH_BASE_PATH:',
-        process.env.DOCUSIGN_OAUTH_BASE_PATH
-    );
-
-    console.log(
-        'ENV CHECK → DOCUSIGN_BASE_PATH:',
-        process.env.DOCUSIGN_BASE_PATH
-    );
-
-    console.log(
-        'ENV CHECK → GEMINI_API_KEY exists:',
-        !!process.env.GEMINI_API_KEY
-    );
-}
+// Load environment variables SAFELY
+// Local me .env load hoga
+// Production (Railway) me ignore hoga
+dotenv.config();
 
 /**
  * Application configuration interface
