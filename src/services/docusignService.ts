@@ -121,13 +121,14 @@ class DocusignService {
                         clientUserId: CLIENT_USER_ID,
                         tabs: {
                             signHereTabs: [
-                                {
-                                    documentId: '1',
-                                    pageNumber: '1',
-                                    xPosition: '100',
-                                    yPosition: '700'
-                                } as SignHere
-                            ]
+  {
+    documentId: '1',
+    anchorString: '/sign_here/',
+    anchorUnits: 'pixels',
+    anchorXOffset: '0',
+    anchorYOffset: '0'
+  }
+]
                         }
                     } as DocusignSigner
                 ]
@@ -162,7 +163,7 @@ class DocusignService {
 
         const viewRequest: RecipientViewRequest = {
             returnUrl,
-            authenticationMethod: 'none',
+            authenticationMethod: 'email',
             email: signer.email,
             userName: signer.name,
             clientUserId: CLIENT_USER_ID,
