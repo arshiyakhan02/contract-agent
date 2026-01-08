@@ -106,7 +106,7 @@ class DocusignService {
 
         const envelope: EnvelopeDefinition = {
             emailSubject: `Please sign: ${docName}`,
-            status: 'created',
+            status: 'sent',
             documents: [
                 {
                     documentBase64: pdfBuffer.toString('base64'),
@@ -166,7 +166,7 @@ async getRecipientViewUrl(
 
     const viewRequest: RecipientViewRequest = {
         returnUrl,
-        authenticationMethod: 'email',
+        authenticationMethod: 'none',
         email: signer.email,
         userName: signer.name,
         clientUserId: CLIENT_USER_ID,
@@ -219,6 +219,6 @@ async getRecipientViewUrlWithRetry(
 
     throw new Error('Unable to generate signing URL');
 }
-} // ✅ THIS closes the class
+} 
 
 export const docusignService = new DocusignService();
