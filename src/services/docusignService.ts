@@ -78,9 +78,12 @@ class DocusignService {
 
             return this.accessToken!;
         } catch (error: any) {
-            logger.error('DocuSign JWT authentication failed:', error);
-            throw new Error(`Failed to authenticate with DocuSign: ${error.message}`);
-        }
+    logger.error('DocuSign ERROR MESSAGE:', error?.message);
+    logger.error('DocuSign ERROR RESPONSE:', error?.response?.body);
+    logger.error('DocuSign ERROR STATUS:', error?.response?.status);
+    throw error;
+}
+
     }
 
     /**
@@ -148,66 +151,74 @@ class DocusignService {
     }
 
     /**
-     * Get embedded signing URL
-     */
-    async getRecipientViewUrl(
-        envelopeId: string,
-        signer: Signer,
-        returnUrl: string
-    ): Promise<string> {
-        const token = await this.getAccessToken();
-        this.apiClient.addDefaultHeader('Authorization', `Bearer ${token}`);
+ * Get embedded signing URL
+ */
+async getRecipientViewUrl(
+    envelopeId: string,
+    signer: Signer,
+    returnUrl: string
+): Promise<string> {
+    const token = await this.getAccessToken();
+    this.apiClient.addDefaultHeader('Authorization', `Bearer ${token}`);
 
-        const envelopesApi = new EnvelopesApi(this.apiClient);
-        const CLIENT_USER_ID = signer.clientUserId || '1000';
+    const envelopesApi = new EnvelopesApi(this.apiClient);
+    const CLIENT_USER_ID = signer.clientUserId || '1000';
 
-        const viewRequest: RecipientViewRequest = {
-            returnUrl,
-            authenticationMethod: 'email',
-            email: signer.email,
-            userName: signer.name,
-            clientUserId: CLIENT_USER_ID,
-            recipientId: '1'
-        };
+    const viewRequest: RecipientViewRequest = {
+        returnUrl,
+        authenticationMethod: 'email',
+        email: signer.email,
+        userName: signer.name,
+        clientUserId: CLIENT_USER_ID,
+        recipientId: '1'
+    };
 
+    try {
         const result = await envelopesApi.createRecipientView(
-            this.accountId!, // ✅ TS-safe
+            this.accountId!,
             envelopeId,
             { recipientViewRequest: viewRequest }
         );
 
         return result.url || '';
-    }
-
-    /**
-     * Retry logic (used by contractService)
-     */
-    async getRecipientViewUrlWithRetry(
-        envelopeId: string,
-        signer: Signer,
-        returnUrl: string,
-        retries: number = 3,
-        delayMs: number = 1500
-    ): Promise<string> {
-        for (let attempt = 1; attempt <= retries; attempt++) {
-            try {
-                logger.info(`Recipient view attempt ${attempt}`);
-                const url = await this.getRecipientViewUrl(
-                    envelopeId,
-                    signer,
-                    returnUrl
-                );
-
-                if (url) return url;
-                throw new Error('Empty signing URL');
-            } catch (err: any) {
-                if (attempt === retries) throw err;
-                await new Promise(res => setTimeout(res, delayMs));
-            }
-        }
-
-        throw new Error('Unable to generate signing URL');
+    } catch (error: any) {
+        logger.error('❌ DocuSign createRecipientView FAILED');
+        logger.error('Message:', error?.message);
+        logger.error('Status:', error?.response?.status);
+        logger.error('Response Body:', error?.response?.body);
+        throw error;
     }
 }
+
+/**
+ * Retry logic (used by contractService)
+ */
+async getRecipientViewUrlWithRetry(
+    envelopeId: string,
+    signer: Signer,
+    returnUrl: string,
+    retries: number = 3,
+    delayMs: number = 1500
+): Promise<string> {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            logger.info(`Recipient view attempt ${attempt}`);
+            const url = await this.getRecipientViewUrl(
+                envelopeId,
+                signer,
+                returnUrl
+            );
+
+            if (url) return url;
+            throw new Error('Empty signing URL');
+        } catch (err: any) {
+            if (attempt === retries) throw err;
+            await new Promise(res => setTimeout(res, delayMs));
+        }
+    }
+
+    throw new Error('Unable to generate signing URL');
+}
+} // ✅ THIS closes the class
 
 export const docusignService = new DocusignService();
