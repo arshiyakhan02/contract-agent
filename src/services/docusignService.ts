@@ -20,6 +20,8 @@ export interface Signer {
 
 class DocusignService {
     private apiClient: ApiClient;
+    private accessToken: string | null = null;
+    private accountId: string | null = null;
 
     constructor() {
         this.apiClient = new ApiClient();
@@ -28,11 +30,16 @@ class DocusignService {
     }
 
     /**
-     * Authenticate with DocuSign using JWT
+     * Authenticate with DocuSign using JWT (token reused)
      */
     private async getAccessToken(): Promise<string> {
         if (config.DOCUSIGN_INTEGRATION_KEY === 'mock-integration-key') {
             return 'mock-access-token';
+        }
+
+        // ✅ TS-safe return
+        if (this.accessToken !== null) {
+            return this.accessToken!;
         }
 
         try {
@@ -42,11 +49,7 @@ class DocusignService {
                 privateKey = privateKey.slice(1, -1);
             }
 
-            let formattedKey = privateKey.replace(/\\n/g, '\n');
-
-            if (!formattedKey.includes('BEGIN RSA PRIVATE KEY')) {
-                formattedKey = `-----BEGIN RSA PRIVATE KEY-----\n${formattedKey}\n-----END RSA PRIVATE KEY-----`;
-            }
+            privateKey = privateKey.replace(/\\n/g, '\n');
 
             this.apiClient.setOAuthBasePath(config.DOCUSIGN_OAUTH_BASE_PATH);
 
@@ -54,11 +57,26 @@ class DocusignService {
                 config.DOCUSIGN_INTEGRATION_KEY.trim(),
                 config.DOCUSIGN_USER_ID.trim(),
                 ['signature', 'impersonation'],
-                Buffer.from(formattedKey),
+                Buffer.from(privateKey),
                 600
             );
 
-            return response.body.access_token;
+            this.accessToken = response.body.access_token;
+
+            // ✅ fetch real account from JWT
+            const userInfo = await this.apiClient.getUserInfo(this.accessToken!);
+            const account = userInfo.accounts?.find(
+                (acc: any) => acc.isDefault === 'true'
+            );
+
+            if (!account) {
+                throw new Error('No default DocuSign account found');
+            }
+
+            this.apiClient.setBasePath(`${account.baseUri}/restapi`);
+            this.accountId = account.accountId;
+
+            return this.accessToken!;
         } catch (error: any) {
             logger.error('DocuSign JWT authentication failed:', error);
             throw new Error(`Failed to authenticate with DocuSign: ${error.message}`);
@@ -66,7 +84,7 @@ class DocusignService {
     }
 
     /**
-     * Send envelope for signing
+     * Send envelope for signing (embedded)
      */
     async sendEnvelope(
         pdfBuffer: Buffer,
@@ -77,63 +95,55 @@ class DocusignService {
             return `mock-envelope-${uuidv4()}`;
         }
 
-        try {
-            const token = await this.getAccessToken();
-            this.apiClient.addDefaultHeader('Authorization', `Bearer ${token}`);
+        const token = await this.getAccessToken();
+        this.apiClient.addDefaultHeader('Authorization', `Bearer ${token}`);
 
-            const envelopesApi = new EnvelopesApi(this.apiClient);
+        const envelopesApi = new EnvelopesApi(this.apiClient);
+        const CLIENT_USER_ID = signer.clientUserId || '1000';
 
-            // ✅ FIX: clientUserId MUST be present for embedded signing
-            const CLIENT_USER_ID = signer.clientUserId || '1000';
-
-            const envelope: EnvelopeDefinition = {
-                emailSubject: `Please sign: ${docName}`,
-                status: 'sent',
-                documents: [
+        const envelope: EnvelopeDefinition = {
+            emailSubject: `Please sign: ${docName}`,
+            status: 'created',
+            documents: [
+                {
+                    documentBase64: pdfBuffer.toString('base64'),
+                    name: docName,
+                    fileExtension: 'pdf',
+                    documentId: '1'
+                } as Document
+            ],
+            recipients: {
+                signers: [
                     {
-                        documentBase64: pdfBuffer.toString('base64'),
-                        name: docName,
-                        fileExtension: 'pdf',
-                        documentId: '1'
-                    } as Document
-                ],
-                recipients: {
-                    signers: [
-                        {
-                            email: signer.email,
-                            name: signer.name,
-                            recipientId: '1',
-                            clientUserId: CLIENT_USER_ID,
-                            tabs: {
-                                signHereTabs: [
-                                    {
-                                        documentId: '1',
-                                        pageNumber: '1',
-                                        xPosition: '100',
-                                        yPosition: '700'
-                                    } as SignHere
-                                ]
-                            }
-                        } as DocusignSigner
-                    ]
-                } as Recipients
-            };
+                        email: signer.email,
+                        name: signer.name,
+                        recipientId: '1',
+                        clientUserId: CLIENT_USER_ID,
+                        tabs: {
+                            signHereTabs: [
+                                {
+                                    documentId: '1',
+                                    pageNumber: '1',
+                                    xPosition: '100',
+                                    yPosition: '700'
+                                } as SignHere
+                            ]
+                        }
+                    } as DocusignSigner
+                ]
+            } as Recipients
+        };
 
-            const result = await envelopesApi.createEnvelope(
-                config.DOCUSIGN_ACCOUNT_ID,
-                { envelopeDefinition: envelope }
-            );
+        const result = await envelopesApi.createEnvelope(
+            this.accountId!, // ✅ TS-safe
+            { envelopeDefinition: envelope }
+        );
 
-            if (!result.envelopeId) {
-                throw new Error('Envelope ID not returned');
-            }
-
-            logger.info(`Envelope sent successfully: ${result.envelopeId}`);
-            return result.envelopeId;
-        } catch (error: any) {
-            logger.error('Error sending DocuSign envelope:', error);
-            throw new Error(`Failed to send envelope: ${error.message}`);
+        if (!result.envelopeId) {
+            throw new Error('Envelope ID not returned');
         }
+
+        return result.envelopeId;
     }
 
     /**
@@ -144,16 +154,10 @@ class DocusignService {
         signer: Signer,
         returnUrl: string
     ): Promise<string> {
-        if (config.DOCUSIGN_INTEGRATION_KEY === 'mock-integration-key') {
-            return `https://demo.docusign.net/Signing/MOCK_VIEW?envelopeId=${envelopeId}`;
-        }
-
         const token = await this.getAccessToken();
         this.apiClient.addDefaultHeader('Authorization', `Bearer ${token}`);
 
         const envelopesApi = new EnvelopesApi(this.apiClient);
-
-        // ✅ SAME clientUserId as envelope
         const CLIENT_USER_ID = signer.clientUserId || '1000';
 
         const viewRequest: RecipientViewRequest = {
@@ -161,11 +165,12 @@ class DocusignService {
             authenticationMethod: 'none',
             email: signer.email,
             userName: signer.name,
-            clientUserId: CLIENT_USER_ID
+            clientUserId: CLIENT_USER_ID,
+            recipientId: '1'
         };
 
         const result = await envelopesApi.createRecipientView(
-            config.DOCUSIGN_ACCOUNT_ID,
+            this.accountId!, // ✅ TS-safe
             envelopeId,
             { recipientViewRequest: viewRequest }
         );
@@ -174,7 +179,7 @@ class DocusignService {
     }
 
     /**
-     * Retry logic for recipient view URL
+     * Retry logic (used by contractService)
      */
     async getRecipientViewUrlWithRetry(
         envelopeId: string,
@@ -195,7 +200,6 @@ class DocusignService {
                 if (url) return url;
                 throw new Error('Empty signing URL');
             } catch (err: any) {
-                logger.warn(`Attempt ${attempt} failed: ${err.message}`);
                 if (attempt === retries) throw err;
                 await new Promise(res => setTimeout(res, delayMs));
             }
