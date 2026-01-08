@@ -96,9 +96,10 @@ class ContractService {
 
         const clientUserId = id;
 
+        // ✅ IMPORTANT FIX: signer email MUST NOT be JWT/API user email
         const signer = {
             name: record.metadata.name,
-            email: record.metadata.email,
+            email: 'test.signer@gmail.com', // 👈 use different real email
             clientUserId
         };
 
@@ -112,15 +113,20 @@ class ContractService {
         record.envelopeId = envelopeId;
         db.set(id, record);
 
+        // ✅ IMPORTANT FIX: dynamic returnUrl (not hardcoded localhost)
+        const returnUrl =
+            process.env.NODE_ENV === 'production'
+                ? `${process.env.APP_BASE_URL}/api/v1/return-url`
+                : 'http://localhost:3000/api/v1/return-url';
+
         const signingUrl = await docusignService.getRecipientViewUrlWithRetry(
             envelopeId,
             signer,
-            'http://localhost:3000/api/v1/return-url'
+            returnUrl
         );
 
         return { envelopeId, signingUrl };
     }
-
 
     // 4️⃣ Chat
     async chatWithContract(id: string, question: string): Promise<string> {
