@@ -57,6 +57,12 @@ export class WebhookController {
 
             logger.info('DocuSign Webhook Received:', eventData);
 
+            // Expected minimal payload:
+            // {
+            //   envelopeId: "xxxx",
+            //   status: "completed"
+            // }
+
             const envelopeId = eventData?.envelopeId;
             const status = eventData?.status;
 
@@ -116,11 +122,14 @@ export class WebhookController {
     }
 
     /**
-     * Endpoint: GET /api/v1/return-url
+     * Endpoint: GET /return-url
      * DocuSign redirect after signing completion
      */
     async returnUrl(req: Request, res: Response) {
-        return res.send(`
+        const event = req.query.event;
+
+        if (event === 'signing_complete') {
+            return res.send(`
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -174,27 +183,30 @@ export class WebhookController {
     <div class="icon">✔️</div>
     <h2>Signature Completed</h2>
     <p>Your document has been signed successfully.</p>
-    <button onclick="closeAndRedirect()">Close</button>
+    <button onclick="closeWindow()">Close</button>
   </div>
 </div>
 
 <script>
-  function closeAndRedirect() {
+  function closeWindow() {
     if (window.opener) {
       window.opener.postMessage(
         { type: 'DOCUSIGN_SIGNED' },
         '*'
       );
     }
-    window.location.href = '${process.env.APP_BASE_URL}/form';
+    window.close();
   }
 
-  setTimeout(closeAndRedirect, 4000);
+  setTimeout(closeWindow, 4000);
 </script>
 
 </body>
 </html>
-        `);
+            `);
+        }
+
+        return res.send('Invalid return event');
     }
 }
 
