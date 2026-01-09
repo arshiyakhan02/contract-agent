@@ -328,6 +328,15 @@
                     log(`Signature request success. Envelope: ${data.envelopeId}`);
                     document.getElementById('contractStatus').innerText = 'SENT_FOR_SIGNATURE';
 
+                    let html = `
+<p style="
+  color:#2b3d51;
+  font-weight:600;
+  margin-bottom:10px;
+">
+  ✅ Envelope Created
+</p>`;
+
                     if (data.signingUrl) {
                         html += `
                             <a href="${data.signingUrl}" target="_blank"
