@@ -111,7 +111,15 @@
         </div>
 
         <h3>Sign</h3>
-        <button onclick="sendForSignature()" style="background-color: #28a745;">
+        <button onclick="sendForSignature()" style="
+    background:#4f9da6;
+    color:#fff;
+    border-radius:20px;
+    font-weight:bold;
+">
+    Generate Signing Link
+</button>
+
             Generate Signing Link
         </button>
 
@@ -303,9 +311,12 @@
             const btn = document.querySelector('button[onclick="sendForSignature()"]');
 
             if (btn) {
-                btn.disabled = true;
-                btn.innerText = 'Generating link...';
-            }
+    btn.disabled = true;
+    btn.innerText = 'Generating link...';
+    btn.style.background = '#4f9da6';
+    btn.style.color = '#fff';
+    btn.style.borderRadius = '20px';
+}
 
             log(`Requesting signature for ${currentId}...`);
 
