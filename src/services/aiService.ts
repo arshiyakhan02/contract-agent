@@ -44,7 +44,7 @@ ${contractText.slice(0, 8000)}
 `;
 
       const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
         {
           contents: [
             {
@@ -103,17 +103,25 @@ ${contractText.slice(0, 8000)}
   ): Promise<string> {
     try {
       const prompt = `
-You are a contract assistant.
+You are a smart AI assistant inside a contract platform.
+
+Rules:
+1. If the user's message is a greeting or small talk, reply in one or two normal sentences.
+2. If the user's message is about the contract, use the contract text.
+3. Format contract-related answers ONLY using simple bullet points.
+4. Do NOT use markdown, headings, ###, **bold**, or special formatting.
+5. Use plain text only.
+
 
 Contract:
 ${contractText.slice(0, 8000)}
 
-Question:
+User message:
 ${userQuestion}
 `;
 
       const response = await axios.post(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`,
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
         {
           contents: [
             {
